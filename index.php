@@ -3,106 +3,89 @@ ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
+// TODO html to inform user
+$success = " ";
+$already_registered = " ";
+$login_failed = " ";
+
+ // TODO DB info.................
+ include "data_base.php";
+
+ // Create connection
+ $conn = new mysqli($db_server, $db_user, $db_pass, $db_name);
+
+ // Check connection
+ if ($conn->connect_error) {
+     die("Connection failed: " . $conn->connect_error);
+ }
+
 // !LOGIN LOGIC.....................................................
 // !.........................................................................
 // !.........................................................................
 // !.........................................................................
 if (isset($_POST['login'])) {
-    session_start();
+  session_start();
+  $email_input = filter_input(INPUT_POST, "email", FILTER_SANITIZE_SPECIAL_CHARS); //Sanitizes input for security
+  $password_input = filter_input(INPUT_POST, "thepassword", FILTER_SANITIZE_SPECIAL_CHARS); //Sanitizes input for security
 
-    // echo $_POST['email'];
-    // echo $_POST['thepassword'];
-    $email_input = $_POST['email'];
-    $password_input = $_POST['thepassword'];
+  // Query the database for the user
+  $stmt = $conn->prepare("SELECT * FROM users WHERE useremail = ?"); //Separates the query from the input for extra security
+  $stmt->bind_param('s', $email_input); //Binds the input from user to SQL query
+  $stmt->execute(); //Executes Query
+  $result = $stmt->get_result(); //Gets Query result
 
-    // TODO DB info.................
-    include "data_base.php";
+  if ($result->num_rows == 1) {
+      $user = $result->fetch_assoc();
+      if (password_verify($password_input, $user['password'])) { //Checks inputted password with hash in DB
+          // User authenticated; set session variable and redirect to access page
+          $_SESSION['useremail'] = $email_input;
+          header("Location: calendar_main.php");
+          exit;
+      }
+  }
 
-    // Create connection
-    $conn = new mysqli($db_server, $db_user, $db_pass, $db_name);
-
-    // Check connection
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error);
-    }
-
-    // Query the database for the user
-    $sql = "SELECT * FROM users WHERE useremail = '$email_input' AND password = '$password_input'";
-    $result = $conn->query($sql);
-
-    if ($result->num_rows == 1) {
-      // User authenticated; set session variable and redirect to access page
-      $_SESSION['useremail'] = $email_input;
-      $_POST = array();
-      header("Location: calendar_main.php");
-    } else {
-      // Invalid credentials; redirect back to login page
-      $login_failed = "Login failed";
-      header("Location: index.php?error=1");
-    }
-
-$conn->close();
+  // Invalid credentials; redirect back to login page
+  $login_failed = "Login failed";
+  header("Location: index.php?error=1");
+  exit; //Terminates Script
 }
 
-// TODO html to inform user
-$success = " ";
-$already_registered = " ";
-$login_failed = " ";
+
 // !CREATE ACCOUNT LOGIC.....................................................
 // !.........................................................................
 // !.........................................................................
 // !.........................................................................
 if (isset($_POST['create_account'])) {
-    $firstname = $_POST['first_name'];
-    $lastname = $_POST['last_name'];
-    $new_email = $_POST['new_email'];
-    $new_password = $_POST['new_password'];
+    $firstname = filter_input(INPUT_POST, "first_name", FILTER_SANITIZE_SPECIAL_CHARS);
+    $lastname = filter_input(INPUT_POST, "last_name", FILTER_SANITIZE_SPECIAL_CHARS);
+    $new_email = filter_input(INPUT_POST, "new_email", FILTER_SANITIZE_SPECIAL_CHARS);
+    $new_password = password_hash($_POST["new_password"], PASSWORD_DEFAULT); // Hash the password
 
-    // Database info
-    include "data_base.php";
-    
-    // Socialkalendar2020!
+    // Use a prepared statement to check if the email exists
+    $stmt = $conn->prepare("SELECT useremail FROM users WHERE useremail = ?");
+    $stmt->bind_param("s", $new_email);
+    $stmt->execute();
+    $stmt->store_result();
 
-    // Create connection
-    $conn = new mysqli($db_server, $db_user, $db_pass, $db_name);
 
-    // Check connection
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error);
+    if ($stmt->num_rows > 0) {
+      $already_registered = "Email address is already in use";
+  } else {
+      // Use a prepared statement to insert user info into the DB
+      $stmt = $conn->prepare("INSERT INTO users (first_name, last_name, useremail, password) VALUES (?, ?, ?, ?)");
+      $stmt->bind_param("ssss", $firstname, $lastname, $new_email, $new_password);
+
+      if ($stmt->execute()) {
+          $success = "You've been registered!";
+          $_POST = array(); // Clear the form data
+      } else {
+          // Handle the database error
+          // echo "Error executing query: " . $stmt->error;
+      }
     }
+  }
 
-    $tableName = "users"; // Replace with your actual table name
-
-    $sql = "SELECT useremail FROM $tableName WHERE useremail = '$new_email'"; //query to check if email is already in DB
-
-    // executes the query above
-    $result = $conn->query($sql);
-
-    if ($result->num_rows > 0) {
-        // echo "User already exists";
-        $already_registered = "Email address is already in use";
-
-        // Closes a previously opened database connection.
-        mysqli_close($conn);
-    } else {
-        // echo "Table is empty.";
-
-        // query that inserts user info into DB
-        $sql = "INSERT INTO users (first_name, last_name, useremail, password) VALUES ('$firstname', '$lastname', '$new_email', '$new_password')";
-
-        // Performs a query on the database
-        mysqli_query($conn, $sql);
-
-        // Closes a previously opened database connection.
-        mysqli_close($conn);
-        $success = "You've been registered!";
-        $_POST = array();
-    }
-} else {
-    /* If there is a problem with the connection this code runs */
-    // echo "Error executing query: " . $conn->error;
-}
-
+$conn->close(); //Closes database connection
 ?>
 
 
