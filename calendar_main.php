@@ -13,11 +13,10 @@ if (!isset($_SESSION['useremail'])) {
 // TODO Global variables working with.........
 $useremail = $_SESSION['useremail']; //email of the current logged in user
 $make_request_message_to_user = '';
-// echo $_SESSION['upload_profile_pic_status'];
-if(!isset($_SESSION['upload_profile_pic_status'])){ 
-    // $upload_profile_pic_status = $_SESSION['upload_profile_pic_status']; //Holds any errors for profile pic upload to display
-    $upload_profile_pic_status = "";
 
+// Message shown to user on the status of the profile pic being uploaded
+if(!isset($_SESSION['upload_profile_pic_status'])){ 
+    $upload_profile_pic_status = "";
 } else {
     $upload_profile_pic_status = $_SESSION['upload_profile_pic_status'];
 }
@@ -42,13 +41,14 @@ include "data_base.php";
 // ?LOGIC TO HANDLE PLACING USER PROFILE PIC...............................................................
 // ?LOGIC TO HANDLE PLACING USER PROFILE PIC...............................................................
 // ?LOGIC TO HANDLE PLACING USER PROFILE PIC...............................................................
-$user_profile_pic = 'images/userDefault.png';
-$get_profile_pic_query = "SELECT * FROM users WHERE useremail = '$useremail'";
-$result = $conn->query($get_profile_pic_query);
-// Checks if the friend request was sent to an existing account
-if ($result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    if($row['profile_pic'] === null){
+$user_profile_pic = 'images/userDefault.png'; //Default profile avatar pic
+$get_profile_pic_query = "SELECT * FROM users WHERE useremail = '$useremail'"; //Query for user data
+$result = $conn->query($get_profile_pic_query); //Result for user data
+
+if ($result->num_rows > 0) { //Checks if anything came back from query
+    $row = $result->fetch_assoc(); //Get first row of result and turns into assoc array
+    // Checks if profile pic is null or is filled and sets appropriate photo
+    if($row['profile_pic'] === null){ 
         $user_profile_pic = 'images/userDefault.png';
     } else {
         $user_profile_pic = $row['profile_pic'];
@@ -125,13 +125,15 @@ if ($result->num_rows > 0) {
 // ?LOGIC TO HANDLE SENDING FRIEND REQUESTS...............................................................
 // ?LOGIC TO HANDLE SENDING FRIEND REQUESTS...............................................................
 if (isset($_POST['sendRequest']) && $_POST['friendEmail'] !== $useremail) {
-    $friend_email_to_save = strtolower($_POST['friendEmail']); // Makes the inputed friend request email lowercase
-    // echo $friend_email_to_save; 
+    $friend_email_to_save = filter_input(INPUT_POST, "friendEmail", FILTER_SANITIZE_SPECIAL_CHARS); //Sanitizes input for security
+    // Checks if the friend trying to add already exists in user's friends or requests
     if(!in_array($friend_email_to_save, $user_friends) && !in_array($friend_email_to_save,$friend_requests)){
-        // MYSQL Query to perform / gets info of friend email to save
-        $sql = "SELECT * FROM $tableName WHERE useremail = '$friend_email_to_save'";
-        // Executes the SQL query above
-        $result = $conn->query($sql);
+        // Secure database querying
+        $stmt = $conn->prepare("SELECT * FROM $tableName WHERE useremail = ?"); //Separates the query from the input for extra security
+        $stmt->bind_param("s", $friend_email_to_save); //Binds the input from user to SQL query
+        $stmt->execute(); //Executes Query
+        $result = $stmt->get_result(); //Gets Query result
+        
         // Checks if the friend request was sent to an existing account
         if ($result->num_rows > 0) {
             // echo 'not empty - user exists';
@@ -150,12 +152,10 @@ if (isset($_POST['sendRequest']) && $_POST['friendEmail'] !== $useremail) {
                 $ready_requests = json_encode($requests); //json encodes the array so it can be sent to DB
                 
                 // updates the data; putting the current user email in the requests of the friend
-                $sql2 = "UPDATE calendar_data
-                SET requests = '$ready_requests'
-                WHERE useremail = '$friend_email_to_save';";
-
-                // Performs a query on the database
-                mysqli_query($conn, $sql2);
+                $sql2 = "UPDATE calendar_data SET requests = ? WHERE useremail = ?";
+                $stmt2 = $conn->prepare($sql2);
+                $stmt2->bind_param("ss", $ready_requests, $friend_email_to_save);
+                $stmt2->execute();
 
                 $make_request_message_to_user = 'Friend request sent!';
             }
@@ -167,6 +167,7 @@ if (isset($_POST['sendRequest']) && $_POST['friendEmail'] !== $useremail) {
         $make_request_message_to_user = 'User already in your friend or request list';
     }
 }
+
 
      // ?LOGIC TO HANDLE ACCEPTING FRIEND REQUESTS...............................................................
      // ?LOGIC TO HANDLE ACCEPTING FRIEND REQUESTS...............................................................
@@ -286,7 +287,7 @@ if (isset($_POST['sendRequest']) && $_POST['friendEmail'] !== $useremail) {
 
     if(isset($_POST['delete'])){
         $friend_to_delete_email = $_POST['requestor_friend_email_delete'];
-        echo $friend_to_delete_email;
+       
         // MYSQL Query to perform
         $sql = "SELECT * FROM $tableName WHERE useremail = '$useremail' OR useremail = '$friend_to_delete_email'";
 
@@ -297,13 +298,9 @@ if (isset($_POST['sendRequest']) && $_POST['friendEmail'] !== $useremail) {
             // echo 'not empty' . "<br>";
              // This line fetches the first row of data and stores it in PHP associative array
              $data = $result->fetch_all();
-            //  print_r($data[0][0]);
-            //  $bah = json_decode($data[0][1]) . "<br>";
-            //  echo "hehe" . $bah[2] . "<br>";
-            //  print_r(json_decode($data[0][1]));
+          
+            //  Makes sure that the returned user and friends info are put in the correct variables
              if($data[0][0] === $useremail){
-                // echo json_decode($data[0][0]) . "<br>";
-                // echo "working";
                 $friends_of_user = json_decode($data[0][2]); // turns the returned requests JSON into a php value
                 $deleted_friend_friends = json_decode($data[1][2]);
              } else {
@@ -311,18 +308,11 @@ if (isset($_POST['sendRequest']) && $_POST['friendEmail'] !== $useremail) {
                 $deleted_friend_friends = json_decode($data[0][2]);
              }
             //  !USER DATA.....
-            //  $friends_of_user = json_decode($data[0][2]); // turns the returned requests JSON into a php value
-            //  echo 'number 1 user';
-            //  print_r($friends_of_user);
-            //  echo "<br>";
              // removes the friend email to delete from the user's friend array
              $array_without_deleted_friend_user = array_diff($friends_of_user, array($friend_to_delete_email));
              //json encodes the array to JSON so it can be sent to DB
              $ready_json_user_friends = json_encode(array_values($array_without_deleted_friend_user)); 
             //  !FRIEND DATA.....
-            //  echo 'number 2 friend';
-            //  print_r($deleted_friend_friends);
-            //  echo "<br>";
             // removes the user from the friend array belonging to the friend being deleted
             $array_without_deleted_friend_friend = array_diff($deleted_friend_friends, array($useremail));
             $ready_deleted_friend_friends = json_encode(array_values($array_without_deleted_friend_friend)); // Makes the array JSON ready

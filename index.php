@@ -56,8 +56,8 @@ if (isset($_POST['login'])) {
 // !.........................................................................
 // !.........................................................................
 if (isset($_POST['create_account'])) {
-    $firstname = filter_input(INPUT_POST, "first_name", FILTER_SANITIZE_SPECIAL_CHARS);
-    $lastname = filter_input(INPUT_POST, "last_name", FILTER_SANITIZE_SPECIAL_CHARS);
+    $firstname = strtolower(filter_input(INPUT_POST, "first_name", FILTER_SANITIZE_SPECIAL_CHARS));
+    $lastname = strtolower(filter_input(INPUT_POST, "last_name", FILTER_SANITIZE_SPECIAL_CHARS));
     $new_email = filter_input(INPUT_POST, "new_email", FILTER_SANITIZE_SPECIAL_CHARS);
     $new_password = password_hash($_POST["new_password"], PASSWORD_DEFAULT); // Hash the password
 
